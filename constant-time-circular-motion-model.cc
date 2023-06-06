@@ -151,6 +151,7 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
         m_helper.Update();
         m_helper.Pause();
         // set position of the drone in the entire map
+        NS_LOG_INFO(position);
         m_helper.SetPosition(position);
         m_vel_helper.SetPosition(position);
         m_event.Cancel();
