@@ -22,6 +22,7 @@ public:
 
   bool wasFound;
   ns3::Time arrivalTime;
+  double detectionScore;
 
   /**
    * Register this type with the TypeId system.
@@ -44,6 +45,18 @@ public:
   /** \brief Set whether the target was found or not
    */
   void setFound (bool found);
+
+  /** \brief Get whether the target was found or not
+   */
+  bool getFound ();
+
+  /** \brief Set the confidence score of the detection from the drone
+  */
+  void setDetectionScore(double score);
+
+  /** \brief Get the confidence score of the detection from the drone
+  */
+  double getDetectionScore();
 
   /** \brief Set whether the target was found or not
    */

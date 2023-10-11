@@ -24,6 +24,7 @@ TypeId ns3::TargetMobilityModel::GetInstanceTypeId() const
 ns3::TargetMobilityModel::TargetMobilityModel() {
     wasFound = false;
     arrivalTime = Seconds(0);
+	detectionScore = 0.0;
 }
 ns3::TargetMobilityModel::~TargetMobilityModel() {
 }
@@ -36,6 +37,22 @@ void TargetMobilityModel::SanityCheck()
 void TargetMobilityModel::setFound(bool found)
 {
     wasFound = found;
+}
+
+bool TargetMobilityModel::getFound()
+{
+    return wasFound;
+}
+
+
+void TargetMobilityModel::setDetectionScore(double score)
+{
+	detectionScore = score;
+}
+  
+double TargetMobilityModel::getDetectionScore()
+{
+	return detectionScore;
 }
 
 void TargetMobilityModel::setArrivalTime(ns3::Time t)

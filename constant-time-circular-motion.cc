@@ -18,15 +18,19 @@
 
 #include "ns3/core-module.h"
 #include "ns3/mobility-module.h"
+#include "ns3/box.h"
 #include "target-mobility-model.h"
 #include "drone-mobility-model.h"
 
 #include <iostream>
 #include <iterator>
+#include <cmath>
 #include <vector>
 #include <random>
 
 using namespace ns3;
+
+double iou_scores[8] = {0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0};
 
 static void 
 CourseChange (std::string foo, Ptr<const MobilityModel> mobility)
@@ -36,6 +40,84 @@ CourseChange (std::string foo, Ptr<const MobilityModel> mobility)
   std::cout << Simulator::Now () << ", model=" << mobility << ", POS: x=" << pos.x << ", y=" << pos.y
             << ", z=" << pos.z << "; VEL:" << vel.x << ", y=" << vel.y
             << ", z=" << vel.z << std::endl;
+}
+
+bool isInside (Vector position, double x_min, double x_max, double y_min, double y_max) {
+    return
+        position.x <= x_max && position.x >= x_min &&
+        position.y <= y_max && position.y >= y_min;
+}
+
+static void
+handleState(NodeContainer drones, NodeContainer targets) {
+    double tan_theta = std::tan(47 * M_PI / 180);
+    double aspect_ratio = 4.0 / 3.0;
+    double x_mul_const = aspect_ratio * tan_theta / std::sqrt(1 + aspect_ratio * aspect_ratio);
+    double y_mul_const = tan_theta / std::sqrt(1 + aspect_ratio * aspect_ratio);
+
+    Ptr<Node> drone = drones.Get(0);
+    Ptr<MobilityModel> drone_mo = drone->GetObject<MobilityModel> ();
+    Ptr<DroneMobilityModel> drone_m = DynamicCast<DroneMobilityModel>(drone_mo);
+    Vector pos = drone_m->GetPosition();
+
+    double x_min = pos.x - x_mul_const * pos.z;
+    double x_max = pos.x + x_mul_const * pos.z;
+    double y_min = pos.y - y_mul_const * pos.z;
+    double y_max = pos.y + y_mul_const * pos.z;
+
+    uint32_t nNodes = targets.GetN ();
+    Ptr<Node> p;
+    Ptr<MobilityModel> mo;
+    Ptr<TargetMobilityModel> m;
+
+    for (uint32_t i = 0; i < nNodes; i++) {
+        p = targets.Get (i);
+        mo = p->GetObject<MobilityModel> ();
+        m = DynamicCast<TargetMobilityModel>(mo);
+        Vector t_pos = m->GetPosition();
+        if (isInside(t_pos, x_min, x_max, y_min, y_max) && !(m->getFound())) {
+            std::cout << "Found target, node number:  " << i << std::endl;
+            m->setFound(true);
+        }
+
+    }
+}
+
+static void
+handleTargetDetection (NodeContainer drones, NodeContainer targets) {
+    double tan_theta = std::tan(47 * M_PI / 180);
+    double aspect_ratio = 4.0 / 3.0;
+    double x_mul_const = aspect_ratio * tan_theta / std::sqrt(1 + aspect_ratio * aspect_ratio);
+    double y_mul_const = tan_theta / std::sqrt(1 + aspect_ratio * aspect_ratio);
+
+    Ptr<Node> drone = drones.Get(0);
+    Ptr<MobilityModel> drone_mo = drone->GetObject<MobilityModel> ();
+    Ptr<DroneMobilityModel> drone_m = DynamicCast<DroneMobilityModel>(drone_mo);
+    Vector pos = drone_m->GetPosition();
+
+    double x_min = pos.x - x_mul_const * pos.z;
+    double x_max = pos.x + x_mul_const * pos.z;
+    double y_min = pos.y - y_mul_const * pos.z;
+    double y_max = pos.y + y_mul_const * pos.z;
+
+    uint32_t nNodes = targets.GetN ();
+    Ptr<Node> p;
+    Ptr<MobilityModel> mo;
+    Ptr<TargetMobilityModel> m;
+
+    for (uint32_t i = 0; i < nNodes; i++) {
+        p = targets.Get (i);
+        mo = p->GetObject<MobilityModel> ();
+        m = DynamicCast<TargetMobilityModel>(mo);
+        Vector t_pos = m->GetPosition();
+        if (isInside(t_pos, x_min, x_max, y_min, y_max) && !(m->getFound())) {
+            std::cout << "Found target, node number:  " << i << std::endl;
+            m->setFound(true);
+        }
+
+    }
+    
+    Simulator::Schedule (Seconds (0.1), &handleTargetDetection, drones, targets);
 }
 
 static void
@@ -62,6 +144,25 @@ handleTargetMove (NodeContainer targets, std::vector<double> times, std::vector<
   Simulator::Schedule (Seconds (1), &handleTargetMove, targets, times, positions);
 }
 
+static void
+countNumberOfDetections (NodeContainer targets) {
+    uint32_t nNodes = targets.GetN ();
+    Ptr<Node> p;
+    Ptr<MobilityModel> mo;
+    Ptr<TargetMobilityModel> m;
+
+    int count = 0;
+    for (uint32_t i = 0; i < nNodes; i++) {
+        p = targets.Get (i);
+        mo = p->GetObject<MobilityModel> ();
+        m = DynamicCast<TargetMobilityModel>(mo);
+        if (m->getFound()) {
+            count++;
+        }
+    }
+    std::cout << "Number of detections:  " << count << std::endl;
+}
+
 int main (int argc, char *argv[])
 {
   LogComponentEnable("ConstantTimeCircularMotionModel", LOG_LEVEL_INFO);
@@ -75,6 +176,10 @@ int main (int argc, char *argv[])
   //double max_radius = 750.0;
   //double min_radius = 75.0;
   double seconds = 100.0;
+
+  int simulation_type = 0;  // drone-cycle
+  //int simulation_type = 1  // drone-zoom
+  //int simulation_type = 2  // hybrid
 
   //Define bounds of simulation. Assumed to be a square.
   double min = 0.0;
@@ -95,6 +200,59 @@ int main (int argc, char *argv[])
   uni->SetAttribute ("Max", DoubleValue (max));
   //double poisson_rate = 0.1;
   
+/*
+          DroneZoom thoughts:
+              Pre: DroneZoom will be a separate mobility module.
+              1. Find hb by looking at the SLA requirement for quality. hb will be
+                  the highest height for which an IoU array of qualities has a quality greater than the SLA.
+              2.  Might need some help in determining hu. For now just set it to 400, the max.
+              3. Start at hu
+              4. If detection, move down to hb.
+                  a. Will want a method to start the drone moving down toward the detection point on a straight line.
+                  b. Set a flag to say the drone is currently in DZ mode
+                  c. When the drone gets to the height, hb stop.
+                  d. Move back to hu on a straight line.
+                  e. So we need: helper functions for determining the point where the drone will go (Pythagorean theorem type deal).
+                      a parameter for saying the Vector that the drone was at at hu, and a vector that will be dynamically
+                      changing to hold where hb will be to get to a height of hb.
+*/
+
+/*
+    New DZ alg.
+        Pre: - Find hb by looking at the SLA requirement for quality. hb will be
+                  the highest height for which an IoU array of qualities has a quality greater than the SLA.
+             - Have a constant velocity that we will use for descent and ascent  
+             - Have a threshold for wuality detection 
+             - Running handleTargetDetection already
+                a. Change setFound to not be True/False. instead check the detection score, 
+                    and if the current detection score is > previous detection score, set new detection score
+        1. Schedule event to wait until detection at hu. function inputs(constantVelocity cv, hu)
+        2. If detection and Target.detectionScore < threshold:
+            a. Calculate unit vector by (D(x,y,z) - T(x,y,z)) / Mag(D(x,y,z) - T(x,y,z))
+            b. DroneZoomMobilityModel.setVelocity(cv * unit vector)
+            c. Wait until D(z) < hb
+            d. Ascend back up to hu by setting velocity to negative of the above velocity
+
+
+    Thoughts:
+        - new handleState scheduled method runs every 0.1 seconds:
+            Start with handleTargetDetection
+            if target isInside && drone height >= hu
+                - DroneZoom.setMode("descent")
+                - do descent  
+                - schedule handleTargetDetection 
+            if DroneZoom.mode is descent and height > hb:
+                - schedule handleTargetDetection
+            if DroneZoom.mode is descent and height <= hb:
+                - schedule handleTargetDetection
+                - do ascent 
+                - set mode to ascent
+            if DroneZoom.mode is ascent and height >= hu:
+                - set velocity to zero
+                - (?) set position to base position (?) (maybe, lets test it out without first)
+                - set mode to "static"
+            schedule handleState
+*/
 
   NodeContainer uavs;
   Ptr<ListPositionAllocator> uav_position_allocator = CreateObject<ListPositionAllocator>();
@@ -108,35 +266,14 @@ int main (int argc, char *argv[])
       //double theta = 2*M_PI;
       for(int j=1;j<=i;j++)
       {
-          /*
-                Thought: Use the rectangle mobility model to visualize a field of view box. Can create it using the same 
-                mobility model as this UAV, and hopefully they just move together. 
-
-                This would probably not work once we try to do drone zoom where the height of the drone will change 
-                and therefore the bounding box will change. But I have yet to figure out that level of dynamism anyway.
-          */
-
           //double angle = (theta/i)*j;
-          uav_position_allocator->Add(Vector(300,200,50.0));
+          uav_position_allocator->Add(Vector(350,200,50.0));
           nodes +=1;
       }
   }
   uavs.Create (nodes);
 
   MobilityHelper uav_mobility;
-  
-  uav_mobility.SetPositionAllocator (uav_position_allocator);
-  uav_mobility.SetMobilityModel("ns3::DroneMobilityModel",
-                            "TangentialVelocity",DoubleValue(50.0),
-                            "RadialVelocity",DoubleValue(100.0),
-                            "TimeToFlyInOrbit",TimeValue(Seconds(seconds)),
-                            "Center", Vector2DValue(Vector2D(200,200)),
-                            "MaximumRadius", DoubleValue(100.0),
-                            "Epsilon", DoubleValue(1.0)
-                            );
-  
-  //Install the circle mobility module on to the first node
-  uav_mobility.Install(uavs);
 
   //Create targets by generating target arrival times according to a poisson process.
   double t = 0.0;
@@ -163,7 +300,34 @@ int main (int argc, char *argv[])
   Config::Connect ("/NodeList/*/$ns3::MobilityModel/CourseChange",
                    MakeCallback (&CourseChange));
 
-  Simulator::Schedule (Seconds (1), &handleTargetMove, targets, times, positions);
+  switch(simulation_type) {
+      case 0: // drone-cycle
+        uav_mobility.SetPositionAllocator (uav_position_allocator);
+        uav_mobility.SetMobilityModel("ns3::DroneMobilityModel",
+                                    "TangentialVelocity",DoubleValue(30.0),
+                                    "RadialVelocity",DoubleValue(45.0),
+                                    "TimeToFlyInOrbit",TimeValue(Seconds(seconds)),
+                                    "Center", Vector2DValue(Vector2D(200,200)),
+                                    "Radius", DoubleValue(150.0)
+                                    );
+        
+        //Install the circle mobility module on to the first node
+        uav_mobility.Install(uavs);
+
+        Simulator::Schedule (Seconds (seconds), &countNumberOfDetections, targets);
+        Simulator::Schedule (Seconds (1), &handleTargetMove, targets, times, positions);
+        Simulator::Schedule (Seconds (0.1), &handleTargetDetection, uavs, targets);
+        break;
+      case 1: //drone-zoom
+        Simulator::Schedule (Seconds (0.1), &handleState, uavs, targets);
+        break;
+      case 2: // hybrid
+        break;
+      default:
+        break;
+  }
+
+  
 
   Simulator::Stop (Seconds (seconds));
 

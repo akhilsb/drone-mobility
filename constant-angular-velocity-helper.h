@@ -61,8 +61,11 @@ namespace ns3{
 
         void Update(void) const;
 
+        void SetRadius(double);
+
     private:
         Vector2D center;
+        double radius;
         Vector2D m_omega;
         mutable Time m_lastUpdate; //!< time of last update
         mutable Vector m_position; //!< state variable for current position

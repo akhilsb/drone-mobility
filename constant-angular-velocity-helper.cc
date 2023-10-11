@@ -54,9 +54,8 @@ ConstantAngularVelocityHelper::GetOmega (void) const
 
 double ConstantAngularVelocityHelper::GetRadius() const
 {
-    double dx = m_position.x - center.x;
-    double dy = m_position.y - center.y;
-    return std::sqrt(dx*dx + dy*dy);
+    //NS_LOG_INFO("CAVH Radius:  " << radius);
+    return radius;
 }
 void 
 ConstantAngularVelocityHelper::SetOmega (const Vector2D &omega)
@@ -75,6 +74,16 @@ ConstantAngularVelocityHelper::SetCenter(const Vector2D &cen)
 }
 
 void
+ConstantAngularVelocityHelper::SetRadius(double rad)
+{
+    NS_LOG_FUNCTION (this << rad);
+    //std::cout << " CAVH Radius:  " << rad << std::endl;
+    radius = rad;
+    //std::cout << "CAVH  Radius:  " << rad << std::endl;
+    m_lastUpdate = Simulator::Now ();
+}
+
+void
 ConstantAngularVelocityHelper::Update (void) const
 {
   NS_LOG_FUNCTION (this);
@@ -87,7 +96,7 @@ ConstantAngularVelocityHelper::Update (void) const
       return;
     }
   double deltaS = deltaTime.GetSeconds ();
-  double radius = GetRadius();
+  //double radius = GetRadius();
   // augment value of theta between 0 and 2*PI
   double theta = GetTheta(m_position);
   theta= theta + deltaS*m_omega.x*m_omega.y;
@@ -96,8 +105,8 @@ ConstantAngularVelocityHelper::Update (void) const
     {
         theta -= 2*M_PI;
     }
-  m_position.x = radius * std::cos(theta);
-  m_position.y = radius *std::sin(theta);
+  m_position.x = radius * std::cos(theta) + center.x;
+  m_position.y = radius *std::sin(theta) + center.y;
 }
 
 double 
@@ -105,10 +114,13 @@ ConstantAngularVelocityHelper::GetTheta(const Vector &position) const
 {
   double radius = GetRadius();
   // To calculate \theta, calculate dot product first and then calculate \the ta
+  //NS_LOG_INFO(position);
   Vector2D positionVector = Vector2D(position.x-center.x,position.y-center.y);
   Vector2D parallelLineToXAxis = Vector2D(1.0,0.0);
   double dotProduct = positionVector.x*parallelLineToXAxis.x + positionVector.y*parallelLineToXAxis.y;
   double theta = std::acos(dotProduct/radius);
+  //NS_LOG_INFO(radius);
+  //NS_LOG_INFO(theta);
   if(positionVector.y < 0)
   {
     theta = 2*M_PI -theta;

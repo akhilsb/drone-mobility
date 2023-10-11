@@ -49,9 +49,9 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
                         DoubleValue(75.0),
                         MakeDoubleAccessor(&ConstantTimeCircularMotionModel::m_orbit_dist),
                         MakeDoubleChecker<double> ())
-            .AddAttribute("MaximumRadius",
+            .AddAttribute("Radius",
                         "The maximum surveillance radius that the nodes should patrol",
-                        DoubleValue(750.0),
+                        DoubleValue(150.0),
                         MakeDoubleAccessor(&ConstantTimeCircularMotionModel::m_max_orbit_rad),
                         MakeDoubleChecker<double>())
             .AddAttribute("TimeToFlyInOrbit",
@@ -85,7 +85,10 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
     ConstantTimeCircularMotionModel::ConstantTimeCircularMotionModel()
     {
         m_helper.SetCenter(center);
+        //NS_LOG_INFO("CTCMM Setting Radius:  " << m_max_orbit_rad);
+        m_helper.SetRadius(150.0);
         DoInitialize();
+        
     }
     void ConstantTimeCircularMotionModel::DoInitialize()
     {
@@ -94,9 +97,12 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
     }
     void ConstantTimeCircularMotionModel::DoConfigureAngVelHelper(const Vector &position)
     {
+        //NS_LOG_INFO("Center: " << center);
+        //NS_LOG_INFO("CTTCMM Radius: " << m_max_orbit_rad);
         // set angular velocity in the circular mobility model
-        Vector pos_vector = Vector(center.x-position.x,center.y-position.y,-1*position.z);
-        double current_orbit_radius = std::sqrt(pos_vector.x*pos_vector.x + pos_vector.y*pos_vector.y);
+        //Vector pos_vector = Vector(center.x-position.x,center.y-position.y,-1*position.z);
+        //double current_orbit_radius = std::sqrt(pos_vector.x*pos_vector.x + pos_vector.y*pos_vector.y);
+        double current_orbit_radius = m_max_orbit_rad;
         double omega = m_tangential_vel/current_orbit_radius;
         // orbital number
         double odd_or_even = std::fmod(current_orbit_radius/m_orbit_dist,2.0);
@@ -117,13 +123,13 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
     {
         if(under_surveillance)
         {
-            if(m_rotating_time >= m_time_rotate.GetSeconds())
-            {
-                m_rotating_time = 0.0;
-                m_helper.Pause();
-                Simulator::ScheduleNow(&ConstantTimeCircularMotionModel::DoOrbitSwitch,this);
-                return;
-            }
+            // if(m_rotating_time >= m_time_rotate.GetSeconds())
+            // {
+            //     m_rotating_time = 0.0;
+            //     m_helper.Pause();
+            //     Simulator::ScheduleNow(&ConstantTimeCircularMotionModel::DoOrbitSwitch,this);
+            //     return;
+            // }
             m_helper.Update();
             m_rotating_time += 0.1;
         }
@@ -151,7 +157,6 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
         m_helper.Update();
         m_helper.Pause();
         // set position of the drone in the entire map
-        NS_LOG_INFO(position);
         m_helper.SetPosition(position);
         m_vel_helper.SetPosition(position);
         m_event.Cancel();
