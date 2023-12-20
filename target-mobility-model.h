@@ -23,6 +23,7 @@ public:
   bool wasFound;
   ns3::Time arrivalTime;
   double detectionScore;
+  ns3::Time detectionTime;
 
   /**
    * Register this type with the TypeId system.
@@ -58,9 +59,17 @@ public:
   */
   double getDetectionScore();
 
-  /** \brief Set whether the target was found or not
+  /** \brief Set when the target arrived
    */
   void setArrivalTime (ns3::Time t);
+
+  /** \brief Set when the target was found
+   */
+  void setDetectionTime (ns3::Time t);
+
+  /** \brief Get the latency (detection time - arrival time)
+   */
+  ns3::Time getLatency ();
   
 };
 

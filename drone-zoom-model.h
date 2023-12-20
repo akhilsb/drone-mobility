@@ -26,7 +26,7 @@ public:
     Static
   };
 
-  Mode mode;
+  std::string mode;
 
   /**
    * Register this type with the TypeId system.
@@ -46,9 +46,9 @@ public:
    */
   void SanityCheck ();
 
-  void setMode(Mode m);
+  void SetMode(std::string m);
 
-  Mode getMode();
+  std::string GetMode();
 
 private:
 

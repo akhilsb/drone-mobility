@@ -41,6 +41,9 @@ private:
 
   double m_theta; //!< Heading angle. If vehicle is moving along x-axis, forward it would be 0, if opposite direction, it's PI (3.14)
   
+
+Vector2D mycenter;
+double myradius;
 };
 
 }

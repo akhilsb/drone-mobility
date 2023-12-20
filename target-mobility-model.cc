@@ -25,6 +25,7 @@ ns3::TargetMobilityModel::TargetMobilityModel() {
     wasFound = false;
     arrivalTime = Seconds(0);
 	detectionScore = 0.0;
+	detectionTime = Seconds(0);
 }
 ns3::TargetMobilityModel::~TargetMobilityModel() {
 }
@@ -58,6 +59,16 @@ double TargetMobilityModel::getDetectionScore()
 void TargetMobilityModel::setArrivalTime(ns3::Time t)
 {
     arrivalTime = t;
+}
+
+void TargetMobilityModel::setDetectionTime(ns3::Time t)
+{
+    detectionTime = t;
+}
+
+ns3::Time TargetMobilityModel::getLatency()
+{
+	return detectionTime - arrivalTime;
 }
 
 }

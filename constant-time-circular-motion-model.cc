@@ -84,15 +84,22 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
     }
     ConstantTimeCircularMotionModel::ConstantTimeCircularMotionModel()
     {
-        m_helper.SetCenter(center);
+        //NS_LOG_INFO("CTCMM Setting Center:  " << Vector2D(400.0,400.0));
+        m_helper.SetCenter(Vector2D(400.0,400.0));
         //NS_LOG_INFO("CTCMM Setting Radius:  " << m_max_orbit_rad);
-        m_helper.SetRadius(150.0);
+        m_helper.SetRadius(335.336);
         DoInitialize();
         
     }
     void ConstantTimeCircularMotionModel::DoInitialize()
     {
         //DoSetPosition(m_initial_position);
+        //m_max_orbit_rad = radius
+        //NS_LOG_INFO("CTCMM Setting Center:  " << Vector2D(400.0,400.0));
+        //m_helper.SetCenter(Vector2D(400.0,400.0));
+        //NS_LOG_INFO("CTCMM Setting Radius:  " << 335.336);
+        //m_helper.SetRadius(335.336);
+        
         number_of_orbits = m_max_orbit_rad/m_orbit_dist;
     }
     void ConstantTimeCircularMotionModel::DoConfigureAngVelHelper(const Vector &position)
@@ -102,11 +109,13 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
         // set angular velocity in the circular mobility model
         //Vector pos_vector = Vector(center.x-position.x,center.y-position.y,-1*position.z);
         //double current_orbit_radius = std::sqrt(pos_vector.x*pos_vector.x + pos_vector.y*pos_vector.y);
+        NS_LOG_INFO("DCAH Setting Radius:  " << m_max_orbit_rad);
+        m_helper.SetRadius(m_max_orbit_rad);
         double current_orbit_radius = m_max_orbit_rad;
         double omega = m_tangential_vel/current_orbit_radius;
         // orbital number
         double odd_or_even = std::fmod(current_orbit_radius/m_orbit_dist,2.0);
-        NS_LOG_INFO("Configuring Angular Velocity Helper with omega: "<<omega << ", Radius: "<< current_orbit_radius << ", odd_or_even: " << odd_or_even);
+        NS_LOG_INFO("Configuring Angular Velocity Helper with position: "<<position << ", Radius: "<< current_orbit_radius << ", center: " << center);
         m_helper.SetCenter(center);
         m_helper.SetPosition(position);
         if(odd_or_even> 0.0 && odd_or_even <=1.0)

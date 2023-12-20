@@ -2,6 +2,7 @@
 #include "ns3/simulator.h"
 #include "ns3/log.h"
 #include <iomanip>      // std::setprecision
+#include <string>
 
 #include <cmath>
 namespace ns3
@@ -28,11 +29,11 @@ ns3::DroneZoomModel::DroneZoomModel() {
 ns3::DroneZoomModel::~DroneZoomModel() {
 }
 
-void DroneZoomModel::setMode(DroneZoomModel::Mode m) {
+void DroneZoomModel::SetMode(std::string m) {
 	mode = m;
 }
 
-DroneZoomModel::Mode DroneZoomModel::getMode() {
+std::string DroneZoomModel::GetMode() {
 	return mode;
 }
 
