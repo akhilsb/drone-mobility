@@ -4,94 +4,95 @@
 #include "ns3/string.h"
 #include "ns3/simulator.h"
 #include "ns3/pointer.h"
-#include "constant-time-circular-motion-model.h"
+#include "hybrid-drone-model.h"
 #include "ns3/double.h"
 #include "ns3/vector.h"
 
 namespace ns3{
 
-NS_LOG_COMPONENT_DEFINE ("ConstantTimeCircularMotionModel");
+NS_LOG_COMPONENT_DEFINE ("HybridDroneModel");
 // Circular mobility model with exchange points - 
 // a node reaches an exchange point and only then it can switch orbits
 // A model such as this is very difficult to analyze and predict, as there 
 // arise phase differences between when drones are in transit and 
 // when they are in circular motion 
-NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
+NS_OBJECT_ENSURE_REGISTERED (HybridDroneModel);
     TypeId
-    ConstantTimeCircularMotionModel::GetTypeId (void)
+    HybridDroneModel::GetTypeId (void)
     {
-        static TypeId tid = TypeId ("ns3::ConstantTimeCircularMotionModel")
+        static TypeId tid = TypeId ("ns3::HybridDroneModel")
             .SetParent<MobilityModel>()
             .SetGroupName ("Mobility")
-            .AddConstructor<ConstantTimeCircularMotionModel> ()
+            .AddConstructor<HybridDroneModel> ()
             .AddAttribute("TangentialVelocity",
                         "Velocity of a node along the arcs/circumferences of the circular orbit",
                         DoubleValue (5.0),
-                        MakeDoubleAccessor(&ConstantTimeCircularMotionModel::m_tangential_vel),
+                        MakeDoubleAccessor(&HybridDroneModel::m_tangential_vel),
                         MakeDoubleChecker<double> ())
             .AddAttribute("RadialVelocity",
                         "Velocity of a node while moving on the radius of the circle",
                         DoubleValue(10.0),
-                        MakeDoubleAccessor(&ConstantTimeCircularMotionModel::m_radial_vel),
+                        MakeDoubleAccessor(&HybridDroneModel::m_radial_vel),
                         MakeDoubleChecker<double> ())
             .AddAttribute("Center",
                         "Center of the circle to revolve around",
                         Vector2DValue(Vector2D(0.0,0.0)),
-                        MakeVector2DAccessor(&ConstantTimeCircularMotionModel::center),
+                        MakeVector2DAccessor(&HybridDroneModel::center),
                         MakeVector2DChecker())
             .AddAttribute("Timestep",
                         "Time step for updating position along the orbit",
                         DoubleValue(1.0),
-                        MakeDoubleAccessor(&ConstantTimeCircularMotionModel::time_step),
+                        MakeDoubleAccessor(&HybridDroneModel::time_step),
                         MakeDoubleChecker<double>())
             .AddAttribute("InterOrbitDistance",
                         "Distance between 2 successive orbits in the circle",
                         DoubleValue(75.0),
-                        MakeDoubleAccessor(&ConstantTimeCircularMotionModel::m_orbit_dist),
+                        MakeDoubleAccessor(&HybridDroneModel::m_orbit_dist),
                         MakeDoubleChecker<double> ())
             .AddAttribute("Radius",
                         "The maximum surveillance radius that the nodes should patrol",
                         DoubleValue(150.0),
-                        MakeDoubleAccessor(&ConstantTimeCircularMotionModel::m_max_orbit_rad),
+                        MakeDoubleAccessor(&HybridDroneModel::m_max_orbit_rad),
                         MakeDoubleChecker<double>())
             .AddAttribute("TimeToFlyInOrbit",
                         "The time to fly in the orbit before switching carrying out orbit switching",
                         TimeValue(Seconds(10.0)),
-                        MakeTimeAccessor(&ConstantTimeCircularMotionModel::m_time_rotate),
+                        MakeTimeAccessor(&HybridDroneModel::m_time_rotate),
                         MakeTimeChecker())
             .AddAttribute("Epsilon",
                         "The value of epsilon - a node moves to upper/lower orbit with prob. epsilon"
                         "and moves to a random orbit with probablity (1-epsilon)",
                         DoubleValue(0.99),
-                        MakeDoubleAccessor(&ConstantTimeCircularMotionModel::m_epsilon),
+                        MakeDoubleAccessor(&HybridDroneModel::m_epsilon),
                         MakeDoubleChecker<double>())
             .AddAttribute("WalkOrFlight",
                         "Walk on this iteration or fly to another orbit in this iteration",
                         StringValue("ns3::UniformRandomVariable[Min=0.0|Max=1.0]"),
-                        MakePointerAccessor(&ConstantTimeCircularMotionModel::m_rw_rf_choice),
+                        MakePointerAccessor(&HybridDroneModel::m_rw_rf_choice),
                         MakePointerChecker<RandomVariableStream>())
             .AddAttribute("WalkChoice",
                         "A random variable which decides whether we walk to the upper orbit or lower orbit",
                         StringValue("ns3::UniformRandomVariable[Min=0.0|Max=1.0]"),
-                        MakePointerAccessor(&ConstantTimeCircularMotionModel::m_rw_choice),
+                        MakePointerAccessor(&HybridDroneModel::m_rw_choice),
                         MakePointerChecker<RandomVariableStream>())
             .AddAttribute("FlightChoice",
                         "A random variable which decides which orbit to move to next",
                         StringValue("ns3::UniformRandomVariable[Min[0.0|Max=2.0]]"),
-                        MakePointerAccessor(&ConstantTimeCircularMotionModel::m_rf_choice),
+                        MakePointerAccessor(&HybridDroneModel::m_rf_choice),
                         MakePointerChecker<RandomVariableStream>());
         return tid;
     }
-    ConstantTimeCircularMotionModel::ConstantTimeCircularMotionModel()
+    HybridDroneModel::HybridDroneModel()
     {
         //NS_LOG_INFO("CTCMM Setting Center:  " << Vector2D(400.0,400.0));
         m_helper.SetCenter(Vector2D(400.0,400.0));
         //NS_LOG_INFO("CTCMM Setting Radius:  " << m_max_orbit_rad);
         m_helper.SetRadius(335.336);
+        mode = HybridDroneModel::Mode::Static;
         DoInitialize();
         
     }
-    void ConstantTimeCircularMotionModel::DoInitialize()
+    void HybridDroneModel::DoInitialize()
     {
         //DoSetPosition(m_initial_position);
         //m_max_orbit_rad = radius
@@ -102,7 +103,7 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
         
         number_of_orbits = m_max_orbit_rad/m_orbit_dist;
     }
-    void ConstantTimeCircularMotionModel::DoConfigureAngVelHelper(const Vector &position)
+    void HybridDroneModel::DoConfigureAngVelHelper(const Vector &position)
     {
         //NS_LOG_INFO("Center: " << center);
         //NS_LOG_INFO("CTTCMM Radius: " << m_max_orbit_rad);
@@ -128,7 +129,7 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
         }
     }
 
-    void ConstantTimeCircularMotionModel::UpdatePosition()
+    void HybridDroneModel::UpdatePosition()
     {
         if(under_surveillance)
         {
@@ -136,7 +137,7 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
             // {
             //     m_rotating_time = 0.0;
             //     m_helper.Pause();
-            //     Simulator::ScheduleNow(&ConstantTimeCircularMotionModel::DoOrbitSwitch,this);
+            //     Simulator::ScheduleNow(&HybridDroneModel::DoOrbitSwitch,this);
             //     return;
             // }
             m_helper.Update();
@@ -150,20 +151,20 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
                 m_radial_total_time = 0.0;
                 m_radial_time = 0.0;
                 m_vel_helper.Pause();
-                Simulator::ScheduleNow(&ConstantTimeCircularMotionModel::DoSurveil,this);
+                Simulator::ScheduleNow(&HybridDroneModel::DoSurveil,this);
                 return;
             }
             */
             m_vel_helper.Update();
             m_radial_time += 0.1;
         }
-        m_event = Simulator::Schedule(Seconds(0.1),&ConstantTimeCircularMotionModel::UpdatePosition,this);
+        m_event = Simulator::Schedule(Seconds(0.1),&HybridDroneModel::UpdatePosition,this);
     }
 
-    ConstantTimeCircularMotionModel::~ConstantTimeCircularMotionModel()
+    HybridDroneModel::~HybridDroneModel()
     {
     }
-    void ConstantTimeCircularMotionModel::DoSetPosition(const Vector &position)
+    void HybridDroneModel::DoSetPosition(const Vector &position)
     {
         m_helper.Update();
         m_helper.Pause();
@@ -174,11 +175,11 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
         DoConfigureAngVelHelper(position);
         // change position here
         current_position = position;
-        m_event = Simulator::ScheduleNow(&ConstantTimeCircularMotionModel::DoSurveil,this);
+        m_event = Simulator::ScheduleNow(&HybridDroneModel::DoSurveil,this);
         under_surveillance = true;
         //time_travelled += time_step;
     }
-    void ConstantTimeCircularMotionModel::DoSurveil()
+    void HybridDroneModel::DoSurveil()
     {
         m_vel_helper.Update();
         m_vel_helper.Pause();
@@ -191,7 +192,7 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
         //     // reset counters
         //     time_to_travel = 0;
         //     time_travelled = 0;
-        //     Simulator::ScheduleNow(&ConstantTimeCircularMotionModel::DoOrbitSwitch,this);
+        //     Simulator::ScheduleNow(&HybridDroneModel::DoOrbitSwitch,this);
         //     NotifyCourseChange();
         //     return;
         // }
@@ -199,10 +200,10 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
         DoConfigureAngVelHelper(m_vel_helper.GetCurrentPosition());
         m_helper.Unpause();
         under_surveillance = true;
-        m_event = Simulator::Schedule(Seconds(0.1),&ConstantTimeCircularMotionModel::UpdatePosition,this);
+        m_event = Simulator::Schedule(Seconds(0.1),&HybridDroneModel::UpdatePosition,this);
         //m_helper.SetPosition(m_position);
     }
-    void ConstantTimeCircularMotionModel::DoOrbitSwitch()
+    void HybridDroneModel::DoOrbitSwitch()
     {
         // whether the node is currently conducting surveillance or orbit switching
         under_surveillance = false;
@@ -354,7 +355,7 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
         }
         if(no_orbit_switch)
         {
-            m_event = Simulator::ScheduleNow(&ConstantTimeCircularMotionModel::DoSurveil,this);
+            m_event = Simulator::ScheduleNow(&HybridDroneModel::DoSurveil,this);
         }
         else
         {
@@ -364,13 +365,13 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
             m_vel_helper.Update();
             m_vel_helper.Unpause();
             m_event = Simulator::Schedule(Seconds(0.1),
-                                &ConstantTimeCircularMotionModel::UpdatePosition,this);
+                                &HybridDroneModel::UpdatePosition,this);
             NotifyCourseChange();
         }
     }
 
     Vector
-    ConstantTimeCircularMotionModel::DoGetVelocity (void) const
+    HybridDroneModel::DoGetVelocity (void) const
     {
         if(under_surveillance)
         {
@@ -382,22 +383,67 @@ NS_OBJECT_ENSURE_REGISTERED (ConstantTimeCircularMotionModel);
             return m_vel_helper.GetVelocity();
         }
     }
-    Vector ConstantTimeCircularMotionModel::DoGetPosition(void) const
+    Vector HybridDroneModel::DoGetPosition(void) const
     {
         return m_helper.GetCurrentPosition();
     }
-    double ConstantTimeCircularMotionModel::DoGetRadius()
+    double HybridDroneModel::DoGetRadius()
     {
         if(under_surveillance)
             return m_helper.GetRadius();
         else
             return -1.0;
     }
-    int64_t ConstantTimeCircularMotionModel::DoAssignStreams (int64_t stream)
+    int64_t HybridDroneModel::DoAssignStreams (int64_t stream)
     {
         m_rw_choice->SetStream(stream);
         m_rf_choice->SetStream(stream+1);
         m_rw_rf_choice->SetStream(stream+2);
         return 3;
     } 
+
+    void HybridDroneModel::SetMode(std::string m) {
+        mode = m;
+    }
+
+    std::string HybridDroneModel::GetMode() {
+        return mode;
+    }
+
+    void HybridDroneModel::Surveil() {
+        m_event = Simulator::ScheduleNow(&HybridDroneModel::DoSurveil,this);
+    }
+
+    void HybridDroneModel::SetVelocity(Vector vel) {
+        NS_LOG_INFO("Setting velocity to : "<< vel);
+        m_vel_helper.SetVelocity(vel);
+    }
+
+    void HybridDroneModel::StopSurveil(Vector vel) {
+        m_vel_helper.Update();
+        m_vel_helper.Pause();
+        m_helper.Update();
+        m_helper.Pause();
+        NS_LOG_INFO("Starting straightline motion from position: "<< m_helper.GetCurrentPosition());
+        Vector top = m_helper.GetCurrentPosition();
+        x_top = top.x;
+        y_top = top.y;
+        z_top = top.z;
+        //DoConfigureAngVelHelper(m_vel_helper.GetCurrentPosition());
+        NS_LOG_INFO("Setting velocity to : "<< vel);
+        m_vel_helper.SetVelocity(vel);
+        m_vel_helper.Unpause();
+        //m_helper.Unpause();
+        under_surveillance = false;
+        m_event = Simulator::Schedule(Seconds(0.1),&HybridDroneModel::UpdatePosition,this);
+    }
+
+    Vector HybridDroneModel::GetTopPosition() {
+        return Vector(x_top, y_top, z_top);
+    }
+
+    void HybridDroneModel::SanityCheck()
+    {
+        std::cout << "Debug Statement";
+    }
 }

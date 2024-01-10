@@ -22,6 +22,7 @@
 #include "target-mobility-model.h"
 #include "drone-mobility-model.h"
 #include "drone-zoom-model.h"
+#include "hybrid-drone-model.h"
 
 #include <iostream>
 #include <iterator>
@@ -34,7 +35,7 @@ using namespace ns3;
 double iou_scores[8] = {0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2};
 Vector drone_cycle_start;
 Vector drone_zoom_start;
-double drone_speed = 10.0;
+double drone_speed = 20.0;
 
 static void 
 CourseChange (std::string foo, Ptr<const MobilityModel> mobility)
@@ -131,6 +132,70 @@ handleState(NodeContainer drones, NodeContainer targets, double hu, double hb) {
         }
     }
     Simulator::Schedule (Seconds (0.1), &handleState, drones, targets, hu, hb);
+}
+
+static void
+handleHybridState(NodeContainer drones, NodeContainer targets, double hu, double hb) {
+    std::string ASCENT("ASCENT");
+    std::string DESCENT("DESCENT");
+    std::string STATIC("STATIC");
+    std::string SURVEIL("SURVEIL");
+
+    double tan_theta = std::tan(47 * M_PI / 180);
+    double aspect_ratio = 4.0 / 3.0;
+    double x_mul_const = aspect_ratio * tan_theta / std::sqrt(1 + aspect_ratio * aspect_ratio);
+    double y_mul_const = tan_theta / std::sqrt(1 + aspect_ratio * aspect_ratio);
+
+    Ptr<Node> drone_n = drones.Get(0);
+    Ptr<MobilityModel> drone_mo = drone_n->GetObject<MobilityModel> ();
+    Ptr<HybridDroneModel> drone = DynamicCast<HybridDroneModel>(drone_mo);
+    Vector pos = drone->GetPosition();
+    std::string mode = drone->GetMode();
+    if (mode.compare(DESCENT) == 0 && pos.z > hb) {
+    } 
+    else if (mode.compare(ASCENT) == 0 && pos.z >= hu) {
+        std::cout << "Setting mode to SURVEIL" << "\n";
+        drone->SetMode("SURVEIL");
+        drone->Surveil();
+    } else {
+
+        double x_min = pos.x - x_mul_const * pos.z;
+        double x_max = pos.x + x_mul_const * pos.z;
+        double y_min = pos.y - y_mul_const * pos.z;
+        double y_max = pos.y + y_mul_const * pos.z;
+
+        uint32_t nNodes = targets.GetN ();
+        Ptr<Node> p;
+        Ptr<MobilityModel> mo;
+        Ptr<TargetMobilityModel> m;
+        double score = getScore(pos.z);
+
+        for (uint32_t i = 0; i < nNodes; i++) {
+            p = targets.Get (i);
+            mo = p->GetObject<MobilityModel> ();
+            m = DynamicCast<TargetMobilityModel>(mo);
+            Vector t_pos = m->GetPosition();
+            if (isInside(t_pos, x_min, x_max, y_min, y_max) && (m->getDetectionScore() < score) && pos.z >= hu) {
+                //std::cout << score << " is greater than:  " << m->getDetectionScore() << std::endl;
+                std::cout << "Found target, STOPPING SURVEIL, STARTING DESCENT" << std::endl;
+                drone->SetMode("DESCENT");
+                drone->StopSurveil(getVelVector(pos, t_pos));
+                //drone->SetVelocity(getVelVector(pos, t_pos));
+                break;
+            } else if (mode.compare(DESCENT) == 0 && pos.z <=hb && isInside(t_pos, x_min, x_max, y_min, y_max) && (m->getDetectionScore() < score)) {
+                m->setFound(true);
+                m->setDetectionScore(score);
+                m->setDetectionTime(Simulator::Now());
+            }
+
+        }
+        if (mode.compare(DESCENT) == 0 && pos.z <=hb) {
+            std::cout << "REACHED BOTTOM, STARTING ASCENT" << std::endl;
+            drone->SetMode("ASCENT");
+            drone->SetVelocity(getVelVector(pos, drone->GetTopPosition()));
+        }
+    }
+    Simulator::Schedule (Seconds (0.1), &handleHybridState, drones, targets, hu, hb);
 }
 
 static void
@@ -286,8 +351,9 @@ determineEndReportLatency (NodeContainer targets, int mode, int hu, double inner
 int main (int argc, char *argv[])
 {
   LogComponentEnable("ConstantTimeCircularMotionModel", LOG_LEVEL_INFO);
+  LogComponentEnable("HybridDroneModel", LOG_LEVEL_INFO);
   LogComponentEnable("ConstantAngularVelocityHelper", LOG_LEVEL_INFO);
-  //LogComponentEnable("ConstantAngularVelocityHelper", LOG_LEVEL_FUNCTION);
+  LogComponentEnable("ConstantVelocityHelper", LOG_LEVEL_FUNCTION);
 
   //Config::SetDefault ("ns3::RandomWalk2dMobilityModel::Mode", StringValue ("Time"));
   //Config::SetDefault ("ns3::RandomWalk2dMobilityModel::Time", StringValue ("2s"));
@@ -347,10 +413,10 @@ int main (int argc, char *argv[])
   //int simulation_type = 2;  // hybrid
   //Vector drone_start = drone_zoom_start;
   Vector drone_start;
-  if (mode == 0) {
-    drone_start = drone_cycle_start;
-  } else {
+  if (mode == 1) {
     drone_start = drone_zoom_start;
+  } else {
+    drone_start = drone_cycle_start;
   }
 
   //Define bounds of simulation. Assumed to be a square.
@@ -431,7 +497,7 @@ int main (int argc, char *argv[])
         uav_mobility.SetPositionAllocator (uav_position_allocator);
         
         uav_mobility.SetMobilityModel("ns3::ConstantTimeCircularMotionModel",
-                                    "TangentialVelocity",DoubleValue(25.0),
+                                    "TangentialVelocity",DoubleValue(20.0),
                                     "RadialVelocity",DoubleValue(55.0),
                                     "TimeToFlyInOrbit",TimeValue(Seconds(seconds)),
                                     "Center", Vector2DValue(Vector2D(400,400)),
@@ -454,6 +520,21 @@ int main (int argc, char *argv[])
         Simulator::Schedule (Seconds (1), &handleTargetMove, targets, times, positions);
         break;
       case 2: // hybrid
+        uav_mobility.SetPositionAllocator (uav_position_allocator);
+        
+        uav_mobility.SetMobilityModel("ns3::HybridDroneModel",
+                                    "TangentialVelocity",DoubleValue(20.0),
+                                    "RadialVelocity",DoubleValue(55.0),
+                                    "TimeToFlyInOrbit",TimeValue(Seconds(seconds)),
+                                    "Center", Vector2DValue(Vector2D(400,400)),
+                                    "Radius", DoubleValue(radius_calc)
+                                    );
+        
+        //Install the circle mobility module on to the first node
+        uav_mobility.Install(uavs);
+        
+        Simulator::Schedule (Seconds (0.1), &handleHybridState, uavs, targets, hu, hb);
+        Simulator::Schedule (Seconds (1), &handleTargetMove, targets, times, positions);
         break;
       default:
         break;
