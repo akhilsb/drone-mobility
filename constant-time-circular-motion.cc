@@ -135,11 +135,18 @@ handleState(NodeContainer drones, NodeContainer targets, double hu, double hb) {
 }
 
 static void
+scheduleSurveil(Ptr<HybridDroneModel> drone) {
+    std::cout << "Setting mode to SURVEIL" << "\n";
+    drone->SetMode("SURVEILANCE");
+    drone->Surveil();
+}
+
+static void
 handleHybridState(NodeContainer drones, NodeContainer targets, double hu, double hb) {
     std::string ASCENT("ASCENT");
     std::string DESCENT("DESCENT");
     std::string STATIC("STATIC");
-    std::string SURVEIL("SURVEIL");
+    std::string SURVEILANCE("SURVEILANCE");
 
     double tan_theta = std::tan(47 * M_PI / 180);
     double aspect_ratio = 4.0 / 3.0;
@@ -155,7 +162,7 @@ handleHybridState(NodeContainer drones, NodeContainer targets, double hu, double
     } 
     else if (mode.compare(ASCENT) == 0 && pos.z >= hu) {
         std::cout << "Setting mode to SURVEIL" << "\n";
-        drone->SetMode("SURVEIL");
+        drone->SetMode("SURVEILANCE");
         drone->Surveil();
     } else {
 
@@ -175,12 +182,17 @@ handleHybridState(NodeContainer drones, NodeContainer targets, double hu, double
             mo = p->GetObject<MobilityModel> ();
             m = DynamicCast<TargetMobilityModel>(mo);
             Vector t_pos = m->GetPosition();
-            if (isInside(t_pos, x_min, x_max, y_min, y_max) && (m->getDetectionScore() < score) && pos.z >= hu) {
+            if (mode.compare(SURVEILANCE) == 0 && isInside(t_pos, x_min, x_max, y_min, y_max) && (m->getDetectionScore() < score) && pos.z >= hu) {
                 //std::cout << score << " is greater than:  " << m->getDetectionScore() << std::endl;
                 std::cout << "Found target, STOPPING SURVEIL, STARTING DESCENT" << std::endl;
+                double time_to_target = 10.0;
                 drone->SetMode("DESCENT");
                 drone->StopSurveil(getVelVector(pos, t_pos));
                 //drone->SetVelocity(getVelVector(pos, t_pos));
+                m->setFound(true);
+                m->setDetectionScore(getScore(hb));
+                m->setDetectionTime(Simulator::Now()+Seconds(time_to_target));
+                Simulator::Schedule (Seconds (time_to_target), &scheduleSurveil, drone);
                 break;
             } else if (mode.compare(DESCENT) == 0 && pos.z <=hb && isInside(t_pos, x_min, x_max, y_min, y_max) && (m->getDetectionScore() < score)) {
                 m->setFound(true);
@@ -277,7 +289,7 @@ determineEndReportLatency (NodeContainer targets, int mode, int hu, double inner
     double x_mul_const = aspect_ratio * tan_theta / std::sqrt(1 + aspect_ratio * aspect_ratio);
     double y_mul_const = tan_theta / std::sqrt(1 + aspect_ratio * aspect_ratio);
 
-    double x_min = 400 - x_mul_const * hu; // Hard coded 200 because that's the center of the simulation (200,200)
+    double x_min = 400 - x_mul_const * hu; // Hard coded 400 because that's the center of the simulation (400,400)
     double x_max = 400 + x_mul_const * hu;
     double y_min = 400 - y_mul_const * hu;
     double y_max = 400 + y_mul_const * hu;
@@ -290,7 +302,7 @@ determineEndReportLatency (NodeContainer targets, int mode, int hu, double inner
         mo = p->GetObject<MobilityModel> ();
         m = DynamicCast<TargetMobilityModel>(mo);
         Vector t_pos = m->GetPosition();
-        if (mode==0) { //drone_cycle
+        if (mode==0 || mode==2) { //drone_cycle
             double rad_to_center = std::sqrt((t_pos.x - 400)*(t_pos.x-400) + ((t_pos.y-400)*(t_pos.y-400)));
             if (Simulator::Now().GetSeconds() > 333 && Simulator::Now().GetSeconds() < 335) {
                 std::cout << "rad to center for target" << i << " :  " << (rad_to_center) << std::endl;
@@ -351,9 +363,9 @@ determineEndReportLatency (NodeContainer targets, int mode, int hu, double inner
 int main (int argc, char *argv[])
 {
   LogComponentEnable("ConstantTimeCircularMotionModel", LOG_LEVEL_INFO);
-  LogComponentEnable("HybridDroneModel", LOG_LEVEL_INFO);
+  //LogComponentEnable("HybridDroneModel", LOG_LEVEL_INFO);
   LogComponentEnable("ConstantAngularVelocityHelper", LOG_LEVEL_INFO);
-  LogComponentEnable("ConstantVelocityHelper", LOG_LEVEL_FUNCTION);
+  //LogComponentEnable("ConstantVelocityHelper", LOG_LEVEL_FUNCTION);
 
   //Config::SetDefault ("ns3::RandomWalk2dMobilityModel::Mode", StringValue ("Time"));
   //Config::SetDefault ("ns3::RandomWalk2dMobilityModel::Time", StringValue ("2s"));
@@ -369,6 +381,7 @@ int main (int argc, char *argv[])
   int start_z = 50;
   int dz_hu = 249;
   double rate = 0.1;
+  double radius = 0.0;
   CommandLine cmd (__FILE__);
   cmd.AddValue("mode", "Drone mode (dronecycle, etc.)", mode);
   cmd.AddValue("seed", "random seed", seed);
@@ -377,6 +390,7 @@ int main (int argc, char *argv[])
   cmd.AddValue("start_z", "Drone start z position", start_z);
   cmd.AddValue("dz_hu", "DroneZoom hu for area calculation", dz_hu);
   cmd.AddValue("rate", "Event rate for poisson process", rate);
+  cmd.AddValue("radius", "Can provide the radius if you want to fix it", radius);
 
   cmd.Parse (argc, argv);
 
@@ -385,13 +399,22 @@ int main (int argc, char *argv[])
   double x_mul_const = aspect_ratio * tan_theta / std::sqrt(1 + aspect_ratio * aspect_ratio);
   double y_mul_const = tan_theta / std::sqrt(1 + aspect_ratio * aspect_ratio);
 
+  /*
+  if (mode == 2) {
+    dz_hu = (dz_hu + start_z) / 2;
+  }
+  */
+
   double x_min = start_x - x_mul_const * dz_hu;
   double x_max = start_x + x_mul_const * dz_hu;
   double y_min = start_y - y_mul_const * dz_hu;
   double y_max = start_y + y_mul_const * dz_hu;
   double area = (x_max - x_min) * (y_max - y_min);
   std::cout << "AREA=" << area << std::endl;
-  double radius_calc = std::sqrt(area / M_PI);
+  double radius_calc = radius;
+  if (radius == 0.0) {
+    radius_calc = std::sqrt(area / M_PI);
+  }
   std::cout << "Radius=" << radius_calc << std::endl;
   double inner_rad = radius_calc - x_mul_const * start_z;
   double outer_rad = radius_calc + x_mul_const * start_z;
@@ -401,6 +424,8 @@ int main (int argc, char *argv[])
 
   drone_cycle_start = Vector(400 + radius_calc, start_y,start_z);
   drone_zoom_start = Vector(start_x, start_y,start_z);
+  std::cout << "Start position=" << drone_cycle_start;
+
   /*
   drone_cycle_start = Vector(350,200,50.0);
   drone_zoom_start = Vector(200,200,400.0);

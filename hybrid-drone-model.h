@@ -25,7 +25,8 @@ namespace ns3{
         enum Mode {
             Ascending,
             Descending,
-            Static
+            Static,
+            Surveilance
         };
 
 

@@ -88,7 +88,7 @@ NS_OBJECT_ENSURE_REGISTERED (HybridDroneModel);
         m_helper.SetCenter(Vector2D(400.0,400.0));
         //NS_LOG_INFO("CTCMM Setting Radius:  " << m_max_orbit_rad);
         m_helper.SetRadius(335.336);
-        mode = HybridDroneModel::Mode::Static;
+        mode = "SURVEILANCE";
         DoInitialize();
         
     }
@@ -100,7 +100,7 @@ NS_OBJECT_ENSURE_REGISTERED (HybridDroneModel);
         //m_helper.SetCenter(Vector2D(400.0,400.0));
         //NS_LOG_INFO("CTCMM Setting Radius:  " << 335.336);
         //m_helper.SetRadius(335.336);
-        
+        NS_LOG_INFO("HybridModel MODE:  " << HybridDroneModel::GetMode());
         number_of_orbits = m_max_orbit_rad/m_orbit_dist;
     }
     void HybridDroneModel::DoConfigureAngVelHelper(const Vector &position)
@@ -411,7 +411,16 @@ NS_OBJECT_ENSURE_REGISTERED (HybridDroneModel);
     }
 
     void HybridDroneModel::Surveil() {
+        Vector t = HybridDroneModel::GetTopPosition();
+        HybridDroneModel::DoSetPosition(t);
+        /*
+        DoConfigureAngVelHelper(t);
+        HybridDroneModel::
+        m_vel_helper.Unpause();
+        m_helper.Unpause();
         m_event = Simulator::ScheduleNow(&HybridDroneModel::DoSurveil,this);
+        */
+        
     }
 
     void HybridDroneModel::SetVelocity(Vector vel) {
@@ -420,22 +429,23 @@ NS_OBJECT_ENSURE_REGISTERED (HybridDroneModel);
     }
 
     void HybridDroneModel::StopSurveil(Vector vel) {
-        m_vel_helper.Update();
+        NS_LOG_INFO("Stopping surveilance");
+        //m_vel_helper.Update();
         m_vel_helper.Pause();
-        m_helper.Update();
+        //m_helper.Update();
         m_helper.Pause();
-        NS_LOG_INFO("Starting straightline motion from position: "<< m_helper.GetCurrentPosition());
+        //NS_LOG_INFO("Starting straightline motion from position: "<< m_helper.GetCurrentPosition());
         Vector top = m_helper.GetCurrentPosition();
         x_top = top.x;
         y_top = top.y;
         z_top = top.z;
         //DoConfigureAngVelHelper(m_vel_helper.GetCurrentPosition());
-        NS_LOG_INFO("Setting velocity to : "<< vel);
-        m_vel_helper.SetVelocity(vel);
-        m_vel_helper.Unpause();
+        //NS_LOG_INFO("Setting velocity to : "<< vel);
+        //m_vel_helper.SetVelocity(vel);
+        //m_vel_helper.Unpause();
         //m_helper.Unpause();
         under_surveillance = false;
-        m_event = Simulator::Schedule(Seconds(0.1),&HybridDroneModel::UpdatePosition,this);
+        //m_event = Simulator::Schedule(Seconds(0.1),&HybridDroneModel::UpdatePosition,this);
     }
 
     Vector HybridDroneModel::GetTopPosition() {
