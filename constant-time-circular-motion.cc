@@ -35,7 +35,9 @@ using namespace ns3;
 double iou_scores[8] = {0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2};
 Vector drone_cycle_start;
 Vector drone_zoom_start;
-double drone_speed = 20.0;
+double drone_side_speed = 10.41; // 23.3 mph
+double drone_speed_ascent = 5.0; //11.2 mph
+double drone_speed_descent = 3.0; // 6.7 mph
 
 static void 
 CourseChange (std::string foo, Ptr<const MobilityModel> mobility)
@@ -59,15 +61,15 @@ double getScore(double height) {
     return iou_scores[i];
 }
 
-Vector getVelVector(Vector start, Vector end) {
+Vector getVelVector(Vector start, Vector end, double speed) {
     std::cout << "START:   " << start << "\n";
     std::cout << "END:   " << end << "\n";
     Vector t = Vector(end.x - start.x, end.y - start.y, end.z - start.z);
     std::cout << "t:   " << t << "\n";
     double mag = sqrt(t.x*t.x + t.y*t.y + t.z*t.z);
-    t.x = (t.x / mag) * drone_speed;
-    t.y = (t.y / mag) * drone_speed;
-    t.z = (t.z / mag) * drone_speed;
+    t.x = (t.x / mag) * speed;
+    t.y = (t.y / mag) * speed;
+    t.z = (t.z / mag) * speed;
     std::cout << "normal t:   " << t << "\n";
     return t;
 }
@@ -116,7 +118,7 @@ handleState(NodeContainer drones, NodeContainer targets, double hu, double hb) {
                 //std::cout << score << " is greater than:  " << m->getDetectionScore() << std::endl;
                 std::cout << "Found target, STARTING DESCENT" << std::endl;
                 drone->SetMode("DESCENT");
-                drone->SetVelocity(getVelVector(pos, t_pos));
+                drone->SetVelocity(getVelVector(pos, t_pos, drone_speed_descent));
                 break;
             } else if (mode.compare(DESCENT) == 0 && pos.z <=hb && isInside(t_pos, x_min, x_max, y_min, y_max) && (m->getDetectionScore() < score)) {
                 m->setFound(true);
@@ -128,7 +130,7 @@ handleState(NodeContainer drones, NodeContainer targets, double hu, double hb) {
         if (mode.compare(DESCENT) == 0 && pos.z <=hb) {
             std::cout << "REACHED BOTTOM, STARTING ASCENT" << std::endl;
             drone->SetMode("ASCENT");
-            drone->SetVelocity(getVelVector(pos, drone_zoom_start));
+            drone->SetVelocity(getVelVector(pos, drone_zoom_start, drone_speed_ascent));
         }
     }
     Simulator::Schedule (Seconds (0.1), &handleState, drones, targets, hu, hb);
@@ -187,7 +189,7 @@ handleHybridState(NodeContainer drones, NodeContainer targets, double hu, double
                 std::cout << "Found target, STOPPING SURVEIL, STARTING DESCENT" << std::endl;
                 double time_to_target = 10.0;
                 drone->SetMode("DESCENT");
-                drone->StopSurveil(getVelVector(pos, t_pos));
+                drone->StopSurveil(getVelVector(pos, t_pos, drone_speed_descent));
                 //drone->SetVelocity(getVelVector(pos, t_pos));
                 m->setFound(true);
                 m->setDetectionScore(getScore(hb));
@@ -204,7 +206,7 @@ handleHybridState(NodeContainer drones, NodeContainer targets, double hu, double
         if (mode.compare(DESCENT) == 0 && pos.z <=hb) {
             std::cout << "REACHED BOTTOM, STARTING ASCENT" << std::endl;
             drone->SetMode("ASCENT");
-            drone->SetVelocity(getVelVector(pos, drone->GetTopPosition()));
+            drone->SetVelocity(getVelVector(pos, drone->GetTopPosition(), drone_speed_ascent));
         }
     }
     Simulator::Schedule (Seconds (0.1), &handleHybridState, drones, targets, hu, hb);
@@ -399,22 +401,25 @@ int main (int argc, char *argv[])
   double x_mul_const = aspect_ratio * tan_theta / std::sqrt(1 + aspect_ratio * aspect_ratio);
   double y_mul_const = tan_theta / std::sqrt(1 + aspect_ratio * aspect_ratio);
 
-  /*
-  if (mode == 2) {
-    dz_hu = (dz_hu + start_z) / 2;
-  }
-  */
-
   double x_min = start_x - x_mul_const * dz_hu;
   double x_max = start_x + x_mul_const * dz_hu;
   double y_min = start_y - y_mul_const * dz_hu;
   double y_max = start_y + y_mul_const * dz_hu;
   double area = (x_max - x_min) * (y_max - y_min);
-  std::cout << "AREA=" << area << std::endl;
+
   double radius_calc = radius;
   if (radius == 0.0) {
-    radius_calc = std::sqrt(area / M_PI);
+      if (mode == 2) {
+        start_z = (dz_hu + start_z) / 2; // start_z is the given DC height. But if it's hybrid, then we change it to the middle of DZ and DC
+        std::cout << "StartZ=" << start_z << std::endl;
+      }
+      double c = x_mul_const * start_z;
+      radius_calc = area / (2*M_PI*c);
+    //radius_calc = std::sqrt(area / M_PI);
+  } else{
+    area = M_PI * 2 * radius_calc * x_mul_const * start_z;
   }
+  std::cout << "AREA=" << area << std::endl;
   std::cout << "Radius=" << radius_calc << std::endl;
   double inner_rad = radius_calc - x_mul_const * start_z;
   double outer_rad = radius_calc + x_mul_const * start_z;
@@ -449,7 +454,7 @@ int main (int argc, char *argv[])
   double max = 800.0;
 
   double hu = start_z;
-  double hb = 50.0;
+  double hb = 100.0;
 
   //Config::SetDefault("ns3::ConstantTimeCircularMotionModel::MaximumRadius",DoubleValue(750.0));
   
@@ -522,8 +527,8 @@ int main (int argc, char *argv[])
         uav_mobility.SetPositionAllocator (uav_position_allocator);
         
         uav_mobility.SetMobilityModel("ns3::ConstantTimeCircularMotionModel",
-                                    "TangentialVelocity",DoubleValue(20.0),
-                                    "RadialVelocity",DoubleValue(55.0),
+                                    "TangentialVelocity",DoubleValue(drone_side_speed),
+                                    "RadialVelocity",DoubleValue(drone_side_speed),
                                     "TimeToFlyInOrbit",TimeValue(Seconds(seconds)),
                                     "Center", Vector2DValue(Vector2D(400,400)),
                                     "Radius", DoubleValue(radius_calc)
@@ -548,8 +553,8 @@ int main (int argc, char *argv[])
         uav_mobility.SetPositionAllocator (uav_position_allocator);
         
         uav_mobility.SetMobilityModel("ns3::HybridDroneModel",
-                                    "TangentialVelocity",DoubleValue(20.0),
-                                    "RadialVelocity",DoubleValue(55.0),
+                                    "TangentialVelocity",DoubleValue(drone_side_speed),
+                                    "RadialVelocity",DoubleValue(drone_side_speed),
                                     "TimeToFlyInOrbit",TimeValue(Seconds(seconds)),
                                     "Center", Vector2DValue(Vector2D(400,400)),
                                     "Radius", DoubleValue(radius_calc)
